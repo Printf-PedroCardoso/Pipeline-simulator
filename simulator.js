@@ -28,7 +28,7 @@ class Cache {
         // Simulação Simplificada de Conjuntos (2-way set associative, 64B block, 4KB size)
         this.sets = 32; 
         this.ways = 2;
-        this.tags = new Array(this.sets).fill(null).map(() => new Array(this.ways).fill({ tag: -1, lru: 0, dirty: false }));
+        this.tags = new Array(this.sets).fill(null).map(() => new Array(this.ways).fill(null).map(() => ({ tag: -1, lru: 0, dirty: false })));
         
         // Métricas
         this.accessCount = 0;
@@ -63,7 +63,7 @@ class Cache {
             this.missCount++;
             // Handle Replacement (LRU)
             let victimIdx = 0;
-            let minLru = set.lru;
+            let minLru = set[0].lru;
             for(let i=1; i<this.ways; i++) {
                 if(set[i].lru < minLru) {
                     minLru = set[i].lru;
@@ -140,9 +140,9 @@ class Simulator {
         
         // Structures
         this.rat = new Array(32).fill(-1); // -1 = In ARF, >=0 = ROB ID
-        this.rob =; // Array acting as circular buffer
-        this.rsALU =; // Array of {busy, op, vj, vk, qj, qk, rob, inst}
-        this.rsLS =;  // Reservation Stations for Load/Store
+        this.rob = []; // Array acting as circular buffer
+        this.rsALU = []; // Array of {busy, op, vj, vk, qj, qk, rob, inst}
+        this.rsLS = [];  // Reservation Stations for Load/Store
         this.cdb = null; // Common Data Bus {tag, value}
         
         // Components
@@ -151,10 +151,11 @@ class Simulator {
         this.predictor = new GsharePredictor();
         
         // Program
-        this.instructions =; // Loaded program memory map
+        this.instructions = {}; // Loaded program memory map
         this.instructionsCommitted = 0;
         this.isRunning = false;
-        this.logs =;
+        this.logs = [];
+        this.nextRobTag = 1;
 
         this.initRS(8, 4); // 8 ALU RS, 4 LS RS
     }
@@ -178,51 +179,60 @@ class Simulator {
         this.memory.fill(0);
         this.regFile.fill(0);
         this.rat.fill(-1);
-        this.rob =;
+        this.rob = [];
         this.initRS(8, 4);
         this.clock = 0;
         this.instructionsCommitted = 0;
-        this.logs =;
+        this.logs = [];
         
         // Simple Parser
         const lines = text.split('\n');
         let loadAddr = 0;
         this.instructions = {}; // Map Addr -> Instruction Template
 
-        lines.forEach(line => {
-            line = line.split(';').trim();
+        lines.forEach(raw => {
+            const line = raw.split(';')[0].trim();
             if(!line) return;
-            
-            const parts = line.replace(/,/g, ' ').split(/\s+/);
-            const op = parts.toUpperCase();
-            let rd=0, rs1=0, rs2=0, imm=0;
-            
-            // Basic Parsing Logic (Simplified for brevity)
-            if(.includes(op)) {
-                rd = parseInt(parts.substring(1));
-                rs1 = parseInt(parts.substring(1));
-                rs2 = parseInt(parts.substring(1));
-            } else if(.includes(op)) {
-                rd = parseInt(parts.substring(1));
-                rs1 = parseInt(parts.substring(1));
-                imm = parseInt(parts);
-            } else if(.includes(op)) {
-                // Format: lw x6, 4(x0)
-                const reg = parseInt(parts.substring(1));
-                const offsetPart = parts;
-                const immVal = parseInt(offsetPart.split('('));
-                const rsVal = parseInt(offsetPart.split('(').replace(')','').substring(1));
-                if(op === 'LW') { rd=reg; rs1=rsVal; imm=immVal; }
-                else { rs2=reg; rs1=rsVal; imm=immVal; } // SW uses rs2 as source data
-            } else if(.includes(op)) {
-                rs1 = parseInt(parts.substring(1));
-                rs2 = parseInt(parts.substring(1));
-                imm = parseInt(parts); // Offset
+
+            const tokens = line.replace(/,/g, ' ').split(/\s+/).filter(t => t.length>0);
+            const op = tokens[0].toUpperCase();
+            let rd = 0, rs1 = 0, rs2 = 0, imm = 0;
+
+            if(['ADD','SUB','AND','OR','XOR','SLT'].includes(op)) {
+                // R-type: OP rd rs1 rs2
+                rd = parseInt(tokens[1].replace(/^x/i, '')) || 0;
+                rs1 = parseInt(tokens[2].replace(/^x/i, '')) || 0;
+                rs2 = parseInt(tokens[3].replace(/^x/i, '')) || 0;
+            } else if(['ADDI'].includes(op)) {
+                // I-type: ADDI rd rs1 imm
+                rd = parseInt(tokens[1].replace(/^x/i, '')) || 0;
+                rs1 = parseInt(tokens[2].replace(/^x/i, '')) || 0;
+                imm = parseInt(tokens[3]) || 0;
+            } else if(['LW'].includes(op)) {
+                // lw x6, 4(x0)
+                rd = parseInt(tokens[1].replace(/^x/i, '')) || 0;
+                const m = tokens[2].match(/(-?\d+)\((x?\d+)\)/i);
+                if(m) {
+                    imm = parseInt(m[1]);
+                    rs1 = parseInt(m[2].replace(/^x/i, '')) || 0;
+                }
+            } else if(['SW'].includes(op)) {
+                // sw x6, 4(x0)  -> store x6 at imm(rs1)
+                rs2 = parseInt(tokens[1].replace(/^x/i, '')) || 0; // value reg
+                const m = tokens[2].match(/(-?\d+)\((x?\d+)\)/i);
+                if(m) {
+                    imm = parseInt(m[1]);
+                    rs1 = parseInt(m[2].replace(/^x/i, '')) || 0;
+                }
+            } else if(['BEQ','BNE'].includes(op)) {
+                rs1 = parseInt(tokens[1].replace(/^x/i, '')) || 0;
+                rs2 = parseInt(tokens[2].replace(/^x/i, '')) || 0;
+                imm = parseInt(tokens[3]) || 0;
             } else if(['JAL'].includes(op)) {
-                rd = parseInt(parts.substring(1));
-                imm = parseInt(parts);
+                rd = parseInt(tokens[1].replace(/^x/i, '')) || 0;
+                imm = parseInt(tokens[2]) || 0;
             }
-            
+
             this.instructions[loadAddr] = { text: line, op, rd, rs1, rs2, imm };
             loadAddr += 4; // 4 bytes per instruction
         });
@@ -268,13 +278,13 @@ class Simulator {
         if(this.rob.length === 0) return;
 
         // Check head (index 0)
-        const head = this.rob;
+        const head = this.rob[0];
         
+        if(!head) return;
+
         if(head.isReady) {
             // Check for Branch Misprediction
-            if(head.op === 'BEQ' |
-
-| head.op === 'BNE') {
+            if(head.op === 'BEQ' || head.op === 'BNE') {
                 const actualTaken = head.result === 1;
                 // Update Predictor
                 this.predictor.update(head.pc, actualTaken);
@@ -284,10 +294,7 @@ class Simulator {
                     this.flushPipeline(head.targetAddr, actualTaken);
                     return; // Flush stops commit of subsequent instrs this cycle
                 }
-            }
-            else if(head.op === 'JAL' |
-
-| head.op === 'JALR') {
+            } else if(head.op === 'JAL' || head.op === 'JALR') {
                 // Jumps are always taken, check target correctness if BTB existed
                 // Here we assume JAL is handled at Decode, but JALR needs execution.
             }
@@ -319,7 +326,7 @@ class Simulator {
 
     flushPipeline(correctPC, taken) {
         // Clear ROB, RS, RAT
-        this.rob =;
+        this.rob = [];
         this.initRS(8, 4);
         this.rat.fill(-1); // Simplification: In real HW, restore RAT from checkpoint or walk back ROB. 
                            // Here we assume "Architectural RAT" (ARF) is correct because we only commit valid instructions.
@@ -341,7 +348,8 @@ class Simulator {
         // 1. Listen to CDB (Simulated by checking ROB values for operands that were waiting)
         // In real HW, CDB happens at end of cycle. Here we check readiness.
 
-       .forEach(rs => {
+        // iterate both ALU and LS RS arrays
+        this.rsALU.concat(this.rsLS).forEach(rs => {
             if(!rs.busy) return;
             const inst = rs.inst;
             
@@ -367,10 +375,8 @@ class Simulator {
                 // Execute Logic
                 if(inst.executionCyclesLeft === inst.totalCycles) {
                     // Start of execution - Memory Access Calculation
-                    if(inst.op === 'LW' |
-
-| inst.op === 'SW') {
-                         inst.memAddr = rs.vj + inst.imm;
+                    if(inst.op === 'LW' || inst.op === 'SW') {
+                        inst.memAddr = rs.vj + inst.imm;
                     }
                 }
                 
@@ -390,9 +396,7 @@ class Simulator {
                                 // Add penalty? For simplicity, we assume latency covers it or stall.
                                 // In detailed sim, we would keep executionCyclesLeft > 0
                             }
-                            val = this.memory[inst.memAddr / 4] |
-
-| 0; 
+                            val = this.memory[Math.floor(inst.memAddr / 4)] | 0; 
                             break;
                         case 'SW': val = rs.vk; break; // Value to store
                         case 'BEQ': val = (rs.vj === rs.vk)? 1 : 0; break;
@@ -407,9 +411,7 @@ class Simulator {
                     if(robEntry) {
                         robEntry.result = val;
                         robEntry.isReady = true;
-                        if(inst.op === 'BEQ' |
-
-| inst.op === 'BNE') {
+                        if(inst.op === 'BEQ' || inst.op === 'BNE') {
                             // Target address calculation for flush logic
                             robEntry.targetAddr = (val === 1)? inst.pc + inst.imm : inst.pc + 4;
                             // If NOT taken, target is PC+4. If Taken, target is PC+imm.
@@ -433,7 +435,7 @@ class Simulator {
         if(!template) return false; // End of code
 
         let rs = null;
-        let isLS =.includes(template.op);
+        let isLS = ['LW','SW'].includes(template.op);
         
         if(isLS) rs = this.rsLS.find(r =>!r.busy);
         else rs = this.rsALU.find(r =>!r.busy);
@@ -458,7 +460,7 @@ class Simulator {
         // Generate a unique incremental tag. 
         // In loop buffer, index is tag.
         // We use a global counter for ID, mapped to ROB array index.
-        const robTag = this.instructionsCommitted + this.rob.length + 1; // Simplified ID
+        const robTag = this.nextRobTag++;
         inst.robTag = robTag;
         
         // 4. Rename (Read RAT/ARF)
@@ -494,9 +496,14 @@ class Simulator {
         }
 
         // Latency Setup
-        if(isLS) inst.totalCycles = EXEC_LATENCIES.LOAD;
-        else if(.includes(inst.op)) inst.totalCycles = EXEC_LATENCIES.BRANCH;
-        else inst.totalCycles = EXEC_LATENCIES.ALU;
+        if(isLS) {
+            // Distinguish load/store
+            inst.totalCycles = (inst.op === 'LW')? EXEC_LATENCIES.LOAD : EXEC_LATENCIES.STORE;
+        } else if(['BEQ','BNE','JAL','JALR'].includes(inst.op)) {
+            inst.totalCycles = EXEC_LATENCIES.BRANCH;
+        } else {
+            inst.totalCycles = EXEC_LATENCIES.ALU;
+        }
         
         inst.executionCyclesLeft = inst.totalCycles;
 
@@ -526,9 +533,7 @@ class Simulator {
         }
 
         // 6. Branch Prediction & PC Update
-        if(inst.op === 'BEQ' |
-
-| inst.op === 'BNE') {
+        if(inst.op === 'BEQ' || inst.op === 'BNE') {
             const pred = this.predictor.predict(this.pc);
             this.rob[this.rob.length-1].predictedTaken = pred;
             inst.predictedTaken = pred;

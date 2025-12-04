@@ -73,11 +73,17 @@ addi x8, x0, 8
                     <div class="flex justify-between"><span>PC:</span> <span id="metric-pc" class="font-mono text-cyan-400">0x0</span></div>
                     <div class="flex justify-between"><span>IPC:</span> <span id="metric-ipc" class="font-mono">0.00</span></div>
                     <div class="flex justify-between"><span>Inst. Commit:</span> <span id="metric-insts" class="font-mono">0</span></div>
+                    
+                    <div class="flex justify-between"><span>Acc. Desvio:</span> <span id="metric-branch-acc" class="font-mono text-cyan-400">0.00%</span></div>
+                    <div class="flex justify-between"><span>Média Ocup. ROB:</span> <span id="metric-avg-rob" class="font-mono">0.00</span></div>
+                    <div class="flex justify-between"><span>Máx Ocup. ROB:</span> <span id="metric-max-rob" class="font-mono">0</span></div>
+                    <div class="flex justify-between"><span>Média Ocup. RS:</span> <span id="metric-avg-rs" class="font-mono">0.00</span></div>
+                    <div class="flex justify-between"><span>Máx Ocup. RS:</span> <span id="metric-max-rs" class="font-mono">0</span></div>
                 </div>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
             <div class="bg-gray-800 p-4 rounded-lg shadow-lg overflow-hidden">
                 <h3 class="text-lg font-semibold mb-2 text-purple-400">Reorder Buffer (ROB) - Commit In-Order</h3>
                 <div class="overflow-y-auto h-64 border border-gray-700 rounded">
@@ -115,6 +121,24 @@ addi x8, x0, 8
                         </thead>
                         <tbody id="rs-table-body" class="font-mono divide-y divide-gray-700">
                             </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg overflow-hidden">
+                <h3 class="text-lg font-semibold mb-2 text-red-400">Load/Store Queue (LSQ)</h3>
+                <div class="overflow-y-auto h-64 border border-gray-700 rounded">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-gray-700 text-gray-300 sticky top-0">
+                            <tr>
+                                <th class="p-2">ROB#</th>
+                                <th class="p-2">Tipo</th>
+                                <th class="p-2">Endereço</th>
+                                <th class="p-2">Mem. Ready</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lsq-table-body" class="font-mono divide-y divide-gray-700">
+                        </tbody>
                     </table>
                 </div>
             </div>

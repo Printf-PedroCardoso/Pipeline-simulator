@@ -118,10 +118,12 @@ class Instruction {
         this.predictedTaken = false;
         this.targetAddr = -1;
         this.executionCyclesLeft = 0;
-        this.isReady = false; // Execution finished
+        this.isReady = false; 
         this.result = 0;
-        this.memAddr = 0; // Calculated effective address
-        this.isFlush = false; // Mark if this instruction is garbage due to flush
+        this.memAddr = 0; 
+        this.isMemReady = false; // ADICIONADO: Endereço/Valor prontos na LSQ
+        this.isStore = (op === 'SW'); // ADICIONADO: Marca se é Store
+        this.isFlush = false;
     }
 }
 
@@ -141,10 +143,17 @@ class Simulator {
         // Structures
         this.rat = new Array(32).fill(-1); // -1 = In ARF, >=0 = ROB ID
         this.rob = []; // Array acting as circular buffer
-        this.rsALU = []; // Array of {busy, op, vj, vk, qj, qk, rob, inst}
+        this.rsALU = []; // Reservation Stations for ALU
         this.rsLS = [];  // Reservation Stations for Load/Store
-        this.cdb = null; // Common Data Bus {tag, value}
+        this.lsq = [];   // ADICIONADO: Load/Store Queue
+        this.cdb = null; 
         
+        // ADICIONADO: Métricas Tracking
+        this.robOccupationHistory = []; // Histórico de ocupação para média/máx
+        this.rsOccupationHistory = [];
+        this.branchCorrect = 0;
+        this.branchTotal = 0;
+
         // Components
         this.l1i = new Cache("L1I", 1, 10);
         this.l1d = new Cache("L1D", 2, 10);
@@ -270,6 +279,10 @@ class Simulator {
             issued++;
         }
         
+        // ADICIONADO: Track occupation metrics
+        this.robOccupationHistory.push(this.rob.length);
+        this.rsOccupationHistory.push(this.rsALU.filter(r => r.busy).length + this.rsLS.filter(r => r.busy).length);
+        
         this.updateUI();
     }
 
@@ -285,7 +298,13 @@ class Simulator {
         if(head.isReady) {
             // Check for Branch Misprediction
             if(head.op === 'BEQ' || head.op === 'BNE') {
+                this.branchTotal++; 
                 const actualTaken = head.result === 1;
+                
+                if(actualTaken === head.predictedTaken) {
+                     this.branchCorrect++;
+                }
+
                 // Update Predictor
                 this.predictor.update(head.pc, actualTaken);
                 
@@ -308,11 +327,21 @@ class Simulator {
                 }
             }
 
-            // Handle Store Commit (Write to Memory/Cache)
-            if(head.op === 'SW') {
-                this.l1d.access(head.memAddr, true);
-                this.memory[head.memAddr / 4] = head.result; // Simplified Memory Write
-                this.log(`MEM[${head.memAddr}] = ${head.result}`);
+            // Handle Store/Load Commit (LSQ) (ATUALIZADO)
+            if(head.op === 'SW' || head.op === 'LW') {
+                const lsqHead = this.lsq[0];
+                if(lsqHead && lsqHead.robTag === head.robTag && lsqHead.isMemReady) {
+                    if(head.op === 'SW') {
+                        // Só escreve na memória se estiver pronto e no topo da LSQ
+                        this.l1d.access(head.memAddr, true); 
+                        this.memory[head.memAddr / 4] = head.result; 
+                        this.log(`COMMIT STORE: MEM[${head.memAddr}] = ${head.result}`);
+                    }
+                    this.lsq.shift(); // Remove da LSQ (tanto Load quanto Store)
+                } else {
+                    // Store/Load não está pronto na LSQ ou não é o mais antigo.
+                    return; 
+                }
             }
 
             // Remove from ROB
@@ -390,15 +419,28 @@ class Simulator {
                         case 'SUB': val = rs.vj - rs.vk; break;
                         case 'ADDI': val = rs.vj + inst.imm; break;
                         case 'LW': 
-                            // Check LSQ for forwarding would go here
-                            const cacheRes = this.l1d.access(inst.memAddr, false);
-                            if(!cacheRes.hit) {
-                                // Add penalty? For simplicity, we assume latency covers it or stall.
-                                // In detailed sim, we would keep executionCyclesLeft > 0
-                            }
-                            val = this.memory[Math.floor(inst.memAddr / 4)] | 0; 
+                            // LSQ/Memória
+                            const cacheResL = this.l1d.access(inst.memAddr, false);
+                            // Lógica de LSQ completa (Load/Store dependency check) seria aqui.
+                            
+                            val = this.memory[Math.floor(inst.memAddr / 4)] | 0; // Leitura
+                            
+                            // Marca LSQ como pronta
+                            const lsqEntryL = this.lsq.find(l => l.robTag === inst.robTag);
+                            if(lsqEntryL) { lsqEntryL.memAddr = inst.memAddr; lsqEntryL.isMemReady = true; }
                             break;
-                        case 'SW': val = rs.vk; break; // Value to store
+                            
+                        case 'SW': 
+                            val = rs.vk; // Valor a ser armazenado
+                            
+                            // Marca LSQ como pronta (Endereço e Valor)
+                            const lsqEntryS = this.lsq.find(l => l.robTag === inst.robTag);
+                            if(lsqEntryS) {
+                                lsqEntryS.memAddr = inst.memAddr;
+                                lsqEntryS.value = val;
+                                lsqEntryS.isMemReady = true; 
+                            }
+                            break; // Store não escreve na memória até o commit
                         case 'BEQ': val = (rs.vj === rs.vk)? 1 : 0; break;
                         case 'BNE': val = (rs.vj!== rs.vk)? 1 : 0; break;
                         //... others
@@ -508,6 +550,19 @@ class Simulator {
         inst.executionCyclesLeft = inst.totalCycles;
 
         // 5. Update Structures
+
+        // ADICIONADO: 4. LSQ Management
+        if (isLS) {
+            const lsqEntry = {
+                robTag: robTag,
+                isStore: (inst.op === 'SW'),
+                memAddr: -1, 
+                value: 0, 
+                isMemReady: false // Endereço calculado (LW) ou endereço+valor pronto (SW)
+            };
+            this.lsq.push(lsqEntry);
+        }
+
         rs.busy = true;
         rs.inst = inst;
         rs.op = inst.op;
@@ -561,6 +616,24 @@ class Simulator {
         const ipc = this.clock > 0? (this.instructionsCommitted / this.clock).toFixed(2) : "0.00";
         document.getElementById('metric-ipc').innerText = ipc;
 
+        // ADICIONADO: Cálculo das Métricas de Ocupação
+        const totalRob = this.robOccupationHistory.reduce((a, b) => a + b, 0);
+        const avgRob = this.clock > 0? (totalRob / this.clock).toFixed(2) : "0.00";
+        const maxRob = this.robOccupationHistory.length > 0? Math.max(...this.robOccupationHistory) : 0;
+        
+        const totalRs = this.rsOccupationHistory.reduce((a, b) => a + b, 0);
+        const avgRs = this.clock > 0? (totalRs / this.clock).toFixed(2) : "0.00";
+        const maxRs = this.rsOccupationHistory.length > 0? Math.max(...this.rsOccupationHistory) : 0;
+        
+        const branchAccuracy = this.branchTotal > 0? (this.branchCorrect / this.branchTotal * 100).toFixed(2) : "0.00";
+
+        document.getElementById('metric-avg-rob').innerText = avgRob;
+        document.getElementById('metric-max-rob').innerText = maxRob;
+        document.getElementById('metric-avg-rs').innerText = avgRs;
+        document.getElementById('metric-max-rs').innerText = maxRs;
+        document.getElementById('metric-branch-acc').innerText = `${branchAccuracy}%`;
+        // FIM ADICIONADO
+
         // Populate ROB Table
         const robBody = document.getElementById('rob-table-body');
         robBody.innerHTML = this.rob.map(r => `
@@ -588,14 +661,48 @@ class Simulator {
                 </tr>
             `;
         }
+        
+        // ADICIONADO: Populate RS Table (para incluir ALU e LS)
+        const rsBody = document.getElementById('rs-table-body');
+        const allRs = this.rsALU.map((r, i) => ({ type: 'ALU', id: i, ...r }))
+                     .concat(this.rsLS.map((r, i) => ({ type: 'LS', id: i, ...r })));
+        
+        rsBody.innerHTML = allRs.map(r => `
+            <tr class="${r.busy? 'text-red-400' : 'text-gray-400'}">
+                <td class="p-1">${r.type}${r.id}</td>
+                <td class="p-1">${r.busy? 'YES' : 'NO'}</td>
+                <td class="p-1">${r.op || '-'}</td>
+                <td class="p-1">${r.vj!== undefined? r.vj : '-'}</td>
+                <td class="p-1">${r.vk!== undefined? r.vk : '-'}</td>
+                <td class="p-1">${r.qj!== -1? `ROB#${r.qj}` : '-'}</td>
+                <td class="p-1">${r.qk!== -1? `ROB#${r.qk}` : '-'}</td>
+                <td class="p-1">${r.robTag || '-'}</td>
+            </tr>
+        `).join('');
+        
+        // ADICIONADO: Populate LSQ Table
+        const lsqBody = document.getElementById('lsq-table-body');
+        lsqBody.innerHTML = this.lsq.map(l => `
+            <tr class="${l.isMemReady? 'text-green-400' : 'text-gray-400'}">
+                <td class="p-1">#${l.robTag}</td>
+                <td class="p-1">${l.isStore? 'STORE' : 'LOAD'}</td>
+                <td class="p-1">${l.memAddr!==-1? `0x${l.memAddr.toString(16)}` : '-'}</td>
+                <td class="p-1">${l.isMemReady? 'YES' : 'NO'}</td>
+            </tr>
+        `).join('');
 
         // Cache Stats
+        const l1iMissRate = this.l1i.accessCount > 0? (this.l1i.missCount / this.l1i.accessCount * 100).toFixed(2) : "0.00";
         document.getElementById('l1i-access').innerText = this.l1i.accessCount;
         document.getElementById('l1i-hits').innerText = this.l1i.hitCount;
         document.getElementById('l1i-misses').innerText = this.l1i.missCount;
+        document.getElementById('l1i-rate').innerText = `${l1iMissRate}%`;
+        
+        const l1dMissRate = this.l1d.accessCount > 0? (this.l1d.missCount / this.l1d.accessCount * 100).toFixed(2) : "0.00";
         document.getElementById('l1d-access').innerText = this.l1d.accessCount;
         document.getElementById('l1d-hits').innerText = this.l1d.hitCount;
         document.getElementById('l1d-misses').innerText = this.l1d.missCount;
+        document.getElementById('l1d-rate').innerText = `${l1dMissRate}%`;
     }
 }
 

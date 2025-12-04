@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,11 +9,28 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Estilos personalizados para tabelas densas */
-       .register-cell { font-family: 'Courier New', monospace; font-size: 0.85rem; }
-       .highlight-change { animation: flash 1s; background-color: #4ade80; }
-        @keyframes flash { 0% { background-color: #4ade80; } 100% { background-color: transparent; } }
+        .register-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .highlight-change {
+            animation: flash 1s;
+            background-color: #4ade80;
+        }
+
+        @keyframes flash {
+            0% {
+                background-color: #4ade80;
+            }
+
+            100% {
+                background-color: transparent;
+            }
+        }
     </style>
 </head>
+
 <body class="bg-gray-900 text-gray-100 font-sans p-4">
     <div class="container mx-auto max-w-7xl">
         <header class="mb-6 border-b border-gray-700 pb-4">
@@ -23,9 +41,10 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <div class="lg:col-span-2 bg-gray-800 p-4 rounded-lg shadow-lg">
                 <h2 class="text-xl font-semibold mb-3 border-b border-gray-600">Código Assembly (RV32I)</h2>
-                
+
                 <div class="mb-3 flex items-center gap-3">
-                    <label for="benchmark-selector" class="text-gray-400 text-sm font-semibold">Carregar Benchmark:</label>
+                    <label for="benchmark-selector" class="text-gray-400 text-sm font-semibold">Carregar
+                        Benchmark:</label>
                     <select id="benchmark-selector" class="bg-gray-700 p-1 rounded border border-gray-600 text-sm">
                         <option value="custom">-- Código Personalizado --</option>
                         <option value="sum_long">1. Somatório (Dependência Longa)</option>
@@ -34,7 +53,9 @@
                         <option value="waw_rename">4. Dependência WAW (Rename Teste)</option>
                     </select>
                 </div>
-                <textarea id="code-input" class="w-full h-40 bg-gray-900 text-green-400 font-mono p-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none text-sm" spellcheck="false">
+                <textarea id="code-input"
+                    class="w-full h-40 bg-gray-900 text-green-400 font-mono p-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none text-sm"
+                    spellcheck="false">
 addi x1, x0, 10
 addi x2, x0, 20
 add x3, x1, x2
@@ -47,10 +68,17 @@ jal x0, 2
 addi x8, x0, 8
 </textarea>
                 <div class="mt-3 flex gap-2">
-                    <button id="btn-load" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-bold transition">Carregar Programa/Benchmark</button>
-                    <button id="btn-step" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm font-bold transition disabled:opacity-50" disabled>Step (Ciclo)</button>
-                    <button id="btn-run" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm font-bold transition disabled:opacity-50" disabled>Run (Executar)</button>
-                    <button id="btn-reset" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm font-bold transition">Reset</button>
+                    <button id="btn-load"
+                        class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-bold transition">Carregar
+                        Programa/Benchmark</button>
+                    <button id="btn-step"
+                        class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm font-bold transition disabled:opacity-50"
+                        disabled>Step (Ciclo)</button>
+                    <button id="btn-run"
+                        class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm font-bold transition disabled:opacity-50"
+                        disabled>Run (Executar)</button>
+                    <button id="btn-reset"
+                        class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm font-bold transition">Reset</button>
                 </div>
             </div>
 
@@ -59,34 +87,61 @@ addi x8, x0, 8
                 <div class="grid grid-cols-2 gap-4 text-sm">
                     <div>
                         <label class="block text-gray-400 mb-1">Latência L1I (ciclos)</label>
-                        <input type="number" id="conf-l1i-lat" value="1" class="w-full bg-gray-700 p-1 rounded border border-gray-600">
+                        <input type="number" id="conf-l1i-lat" value="1"
+                            class="w-full bg-gray-700 p-1 rounded border border-gray-600">
                     </div>
                     <div>
                         <label class="block text-gray-400 mb-1">Latência L1D (ciclos)</label>
-                        <input type="number" id="conf-l1d-lat" value="2" class="w-full bg-gray-700 p-1 rounded border border-gray-600">
+                        <input type="number" id="conf-l1d-lat" value="2"
+                            class="w-full bg-gray-700 p-1 rounded border border-gray-600">
                     </div>
                     <div>
                         <label class="block text-gray-400 mb-1">Penalidade Miss (ciclos)</label>
-                        <input type="number" id="conf-miss-pen" value="10" class="w-full bg-gray-700 p-1 rounded border border-gray-600">
+                        <input type="number" id="conf-miss-pen" value="10"
+                            class="w-full bg-gray-700 p-1 rounded border border-gray-600">
                     </div>
                     <div>
                         <label class="block text-gray-400 mb-1">Janela ROB</label>
-                        <input type="number" id="conf-rob-size" value="32" class="w-full bg-gray-700 p-1 rounded border border-gray-600">
+                        <input type="number" id="conf-rob-size" value="32"
+                            class="w-full bg-gray-700 p-1 rounded border border-gray-600">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-1">Baseline (P2) Ciclos</label>
+                        <input type="number" id="conf-baseline-cycles" value="1000"
+                            class="w-full bg-gray-700 p-1 rounded border border-gray-600">
                     </div>
                 </div>
-                
+
                 <h2 class="text-xl font-semibold mt-4 mb-2 border-b border-gray-600">Métricas Globais</h2>
                 <div class="grid grid-cols-2 gap-2 text-sm">
-                    <div class="flex justify-between"><span>Ciclos:</span> <span id="metric-cycles" class="font-mono text-yellow-400">0</span></div>
-                    <div class="flex justify-between"><span>PC:</span> <span id="metric-pc" class="font-mono text-cyan-400">0x0</span></div>
-                    <div class="flex justify-between"><span>IPC:</span> <span id="metric-ipc" class="font-mono">0.00</span></div>
-                    <div class="flex justify-between"><span>Inst. Commit:</span> <span id="metric-insts" class="font-mono">0</span></div>
-                    
-                    <div class="flex justify-between"><span>Acc. Desvio:</span> <span id="metric-branch-acc" class="font-mono text-cyan-400">0.00%</span></div>
-                    <div class="flex justify-between"><span>Média Ocup. ROB:</span> <span id="metric-avg-rob" class="font-mono">0.00</span></div>
-                    <div class="flex justify-between"><span>Máx Ocup. ROB:</span> <span id="metric-max-rob" class="font-mono">0</span></div>
-                    <div class="flex justify-between"><span>Média Ocup. RS:</span> <span id="metric-avg-rs" class="font-mono">0.00</span></div>
-                    <div class="flex justify-between"><span>Máx Ocup. RS:</span> <span id="metric-max-rs" class="font-mono">0</span></div>
+                    <div class="flex justify-between"><span>Ciclos:</span> <span id="metric-cycles"
+                            class="font-mono text-yellow-400">0</span></div>
+                    <div class="flex justify-between"><span>PC:</span> <span id="metric-pc"
+                            class="font-mono text-cyan-400">0x0</span></div>
+                    <div class="flex justify-between"><span>IPC:</span> <span id="metric-ipc"
+                            class="font-mono">0.00</span></div>
+                    <div class="flex justify-between"><span>Inst. Commit:</span> <span id="metric-insts"
+                            class="font-mono">0</span></div>
+
+                    <div class="flex justify-between"><span>Acc. Desvio:</span> <span id="metric-branch-acc"
+                            class="font-mono text-cyan-400">0.00%</span></div>
+                    <div class="flex justify-between"><span>Média Ocup. ROB:</span> <span id="metric-avg-rob"
+                            class="font-mono">0.00</span></div>
+                    <div class="flex justify-between"><span>Máx Ocup. ROB:</span> <span id="metric-max-rob"
+                            class="font-mono">0</span></div>
+                    <div class="flex justify-between"><span>Média Ocup. RS:</span> <span id="metric-avg-rs"
+                            class="font-mono">0.00</span></div>
+                    <div class="flex justify-between"><span>Máx Ocup. RS:</span> <span id="metric-max-rs"
+                            class="font-mono">0</span></div>
+
+                    <div class="col-span-2 border-t border-gray-600 my-1"></div>
+
+                    <div class="flex justify-between"><span>Speedup:</span> <span id="metric-speedup"
+                            class="font-mono text-green-400">1.00x</span></div>
+                    <div class="flex justify-between"><span>MPKI (I/D):</span> <span id="metric-mpki"
+                            class="font-mono">0.00 / 0.00</span></div>
+                    <div class="flex justify-between"><span>AMAT (I/D):</span> <span id="metric-amat"
+                            class="font-mono">0.00 / 0.00</span></div>
                 </div>
             </div>
         </div>
@@ -106,7 +161,7 @@ addi x8, x0, 8
                             </tr>
                         </thead>
                         <tbody id="rob-table-body" class="font-mono divide-y divide-gray-700">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -128,11 +183,11 @@ addi x8, x0, 8
                             </tr>
                         </thead>
                         <tbody id="rs-table-body" class="font-mono divide-y divide-gray-700">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
             </div>
-            
+
             <div class="bg-gray-800 p-4 rounded-lg shadow-lg overflow-hidden">
                 <h3 class="text-lg font-semibold mb-2 text-red-400">Load/Store Queue (LSQ)</h3>
                 <div class="overflow-y-auto h-64 border border-gray-700 rounded">
@@ -166,7 +221,7 @@ addi x8, x0, 8
                             </tr>
                         </thead>
                         <tbody id="reg-table-body" class="font-mono divide-y divide-gray-700">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -177,19 +232,24 @@ addi x8, x0, 8
                     <div class="bg-gray-700 p-2 rounded">
                         <h4 class="font-bold text-center border-b border-gray-600 mb-1">L1 Instruction Cache</h4>
                         <div class="flex justify-between"><span>Accesses:</span> <span id="l1i-access">0</span></div>
-                        <div class="flex justify-between"><span>Hits:</span> <span id="l1i-hits" class="text-green-400">0</span></div>
-                        <div class="flex justify-between"><span>Misses:</span> <span id="l1i-misses" class="text-red-400">0</span></div>
+                        <div class="flex justify-between"><span>Hits:</span> <span id="l1i-hits"
+                                class="text-green-400">0</span></div>
+                        <div class="flex justify-between"><span>Misses:</span> <span id="l1i-misses"
+                                class="text-red-400">0</span></div>
                         <div class="flex justify-between"><span>Miss Rate:</span> <span id="l1i-rate">0%</span></div>
                     </div>
                     <div class="bg-gray-700 p-2 rounded">
                         <h4 class="font-bold text-center border-b border-gray-600 mb-1">L1 Data Cache</h4>
                         <div class="flex justify-between"><span>Accesses:</span> <span id="l1d-access">0</span></div>
-                        <div class="flex justify-between"><span>Hits:</span> <span id="l1d-hits" class="text-green-400">0</span></div>
-                        <div class="flex justify-between"><span>Misses:</span> <span id="l1d-misses" class="text-red-400">0</span></div>
+                        <div class="flex justify-between"><span>Hits:</span> <span id="l1d-hits"
+                                class="text-green-400">0</span></div>
+                        <div class="flex justify-between"><span>Misses:</span> <span id="l1d-misses"
+                                class="text-red-400">0</span></div>
                         <div class="flex justify-between"><span>Miss Rate:</span> <span id="l1d-rate">0%</span></div>
                     </div>
                 </div>
-                <div id="sim-log" class="flex-1 bg-black p-2 font-mono text-xs text-green-500 overflow-y-auto border border-gray-700 rounded whitespace-pre-wrap">
+                <div id="sim-log"
+                    class="flex-1 bg-black p-2 font-mono text-xs text-green-500 overflow-y-auto border border-gray-700 rounded whitespace-pre-wrap">
                     > Simulador pronto. Carregue um programa.
                 </div>
             </div>
@@ -198,4 +258,5 @@ addi x8, x0, 8
 
     <script src="simulator.js"></script>
 </body>
+
 </html>

@@ -851,3 +851,112 @@ document.getElementById('btn-reset').onclick = () => {
     document.getElementById('btn-step').disabled = true;
     document.getElementById('btn-run').disabled = true;
 };
+Simulator.prototype.updateUI = function() {
+    document.getElementById('metric-cycles').innerText = this.clock;
+    document.getElementById('metric-pc').innerText = '0x' + this.pc.toString(16);
+    document.getElementById('metric-insts').innerText = this.instructionsCommitted;
+    const ipc = this.clock > 0? (this.instructionsCommitted / this.clock).toFixed(2) : "0.00";
+    document.getElementById('metric-ipc').innerText = ipc;
+
+    const totalRob = this.robOccupationHistory.reduce((a, b) => a + b, 0);
+    const avgRob = this.clock > 0? (totalRob / this.clock).toFixed(2) : "0.00";
+    const maxRob = this.robOccupationHistory.length > 0? Math.max(...this.robOccupationHistory) : 0;
+    
+    const totalRs = this.rsOccupationHistory.reduce((a, b) => a + b, 0);
+    const avgRs = this.clock > 0? (totalRs / this.clock).toFixed(2) : "0.00";
+    const maxRs = this.rsOccupationHistory.length > 0? Math.max(...this.rsOccupationHistory) : 0;
+    
+    const branchAccuracy = this.branchTotal > 0? (this.branchCorrect / this.branchTotal * 100).toFixed(2) : "0.00";
+
+    document.getElementById('metric-avg-rob').innerText = avgRob;
+    document.getElementById('metric-max-rob').innerText = maxRob;
+    document.getElementById('metric-avg-rs').innerText = avgRs;
+    document.getElementById('metric-max-rs').innerText = maxRs;
+    document.getElementById('metric-branch-acc').innerText = `${branchAccuracy}%`;
+
+    const robBody = document.getElementById('rob-table-body');
+    robBody.innerHTML = this.rob.map(r => `
+        <tr class="${r.isReady? 'text-green-400' : 'text-gray-400'}">
+            <td class="p-1">#${r.robTag}</td>
+            <td class="p-1">${r.instText}</td>
+            <td class="p-1">${r.isReady? 'DONE' : 'EXEC'}</td>
+            <td class="p-1">${r.rd? 'x'+r.rd : '-'}</td>
+            <td class="p-1">${r.result}</td>
+        </tr>
+    `).join('');
+
+    const regBody = document.getElementById('reg-table-body');
+    regBody.innerHTML = '';
+    for(let i=0; i<32; i++) {
+        const ratVal = this.rat[i];
+        const ratStr = ratVal === -1? '-' : `ROB#${ratVal}`;
+        regBody.innerHTML += `
+            <tr class="hover:bg-gray-700">
+                <td class="p-1 text-blue-300">x${i}</td>
+                <td class="p-1 register-cell">0x${this.regFile[i].toString(16).toUpperCase()}</td>
+                <td class="p-1 register-cell">${this.regFile[i]}</td>
+                <td class="p-1 text-yellow-500">${ratStr}</td>
+            </tr>
+        `;
+    }
+    
+    const rsBody = document.getElementById('rs-table-body');
+    const allRs = this.rsALU.map((r, i) => ({ type: 'ALU', id: i, ...r }))
+                    .concat(this.rsLS.map((r, i) => ({ type: 'LS', id: i, ...r })));
+    
+    rsBody.innerHTML = allRs.map(r => `
+        <tr class="${r.busy? 'text-red-400' : 'text-gray-400'}">
+            <td class="p-1">${r.type}${r.id}</td>
+            <td class="p-1">${r.busy? 'YES' : 'NO'}</td>
+            <td class="p-1">${r.op || '-'}</td>
+            <td class="p-1">${r.vj!== undefined? r.vj : '-'}</td>
+            <td class="p-1">${r.vk!== undefined? r.vk : '-'}</td>
+            <td class="p-1">${r.qj!== -1? `ROB#${r.qj}` : '-'}</td>
+            <td class="p-1">${r.qk!== -1? `ROB#${r.qk}` : '-'}</td>
+            <td class="p-1">${r.robTag || '-'}</td>
+        </tr>
+    `).join('');
+    
+    const lsqBody = document.getElementById('lsq-table-body');
+    lsqBody.innerHTML = this.lsq.map(l => `
+        <tr class="${l.isMemReady? 'text-green-400' : 'text-gray-400'}">
+            <td class="p-1">#${l.robTag}</td>
+            <td class="p-1">${l.isStore? 'STORE' : 'LOAD'}</td>
+            <td class="p-1">${l.memAddr!==-1? `0x${l.memAddr.toString(16)}` : '-'}</td>
+            <td class="p-1">${l.isMemReady? 'YES' : 'NO'}</td>
+        </tr>
+    `).join('');
+
+    const l1iMissRate = this.l1i.accessCount > 0? (this.l1i.missCount / this.l1i.accessCount * 100).toFixed(2) : "0.00";
+    document.getElementById('l1i-access').innerText = this.l1i.accessCount;
+    document.getElementById('l1i-hits').innerText = this.l1i.hitCount;
+    document.getElementById('l1i-misses').innerText = this.l1i.missCount;
+    document.getElementById('l1i-rate').innerText = `${l1iMissRate}%`;
+    
+    const l1dMissRate = this.l1d.accessCount > 0? (this.l1d.missCount / this.l1d.accessCount * 100).toFixed(2) : "0.00";
+    document.getElementById('l1d-access').innerText = this.l1d.accessCount;
+    document.getElementById('l1d-hits').innerText = this.l1d.hitCount;
+    document.getElementById('l1d-misses').innerText = this.l1d.missCount;
+    document.getElementById('l1d-rate').innerText = `${l1dMissRate}%`;
+
+    // --- NOVAS MÉTRICAS (MPKI, AMAT, Speedup) ---
+    
+    const mpkiI = this.instructionsCommitted > 0 ? (this.l1i.missCount / this.instructionsCommitted * 1000).toFixed(2) : "0.00";
+    const mpkiD = this.instructionsCommitted > 0 ? (this.l1d.missCount / this.instructionsCommitted * 1000).toFixed(2) : "0.00";
+    const mpkiEl = document.getElementById('metric-mpki');
+    if(mpkiEl) mpkiEl.innerText = `${mpkiI} / ${mpkiD}`;
+
+    const mrI = this.l1i.accessCount > 0 ? (this.l1i.missCount / this.l1i.accessCount) : 0;
+    const mrD = this.l1d.accessCount > 0 ? (this.l1d.missCount / this.l1d.accessCount) : 0;
+    
+    const amatI = (this.l1i.latency + (mrI * this.l1i.missPenalty)).toFixed(2);
+    const amatD = (this.l1d.latency + (mrD * this.l1d.missPenalty)).toFixed(2);
+    const amatEl = document.getElementById('metric-amat');
+    if(amatEl) amatEl.innerText = `${amatI} / ${amatD}`;
+
+    const baselineEl = document.getElementById('conf-baseline-cycles');
+    const baseline = baselineEl ? (parseInt(baselineEl.value) || 1) : 1;
+    const speedup = this.clock > 0 ? (baseline / this.clock).toFixed(2) : "0.00";
+    const speedupEl = document.getElementById('metric-speedup');
+    if(speedupEl) speedupEl.innerText = `${speedup}x`;
+};

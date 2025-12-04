@@ -960,3 +960,32 @@ Simulator.prototype.updateUI = function() {
     const speedupEl = document.getElementById('metric-speedup');
     if(speedupEl) speedupEl.innerText = `${speedup}x`;
 };
+
+document.getElementById('btn-run').onclick = function() {
+    if(runInterval) {
+        clearInterval(runInterval);
+        runInterval = null;
+        this.innerText = "Run (Executar)";
+        this.classList.remove('bg-red-600');
+        this.classList.add('bg-purple-600');
+    } else {
+        runInterval = setInterval(() => {
+            // Check completion condition
+            // Note: sim.isRunning might need to be checked carefully if it's not updated correctly elsewhere
+            // But based on existing code: !sim.isRunning && sim.rob.length === 0 && sim.pc >= ...
+            if(!sim.isRunning && sim.rob.length === 0 && sim.pc >= Object.keys(sim.instructions).length * 4) {
+                clearInterval(runInterval);
+                runInterval = null;
+                this.innerText = "Run (Executar)";
+                this.classList.remove('bg-red-600');
+                this.classList.add('bg-purple-600');
+                alert("Execução Finalizada!");
+                return;
+            }
+            sim.step();
+        }, 100);
+        this.innerText = "Stop (Parar)";
+        this.classList.remove('bg-purple-600');
+        this.classList.add('bg-red-600');
+    }
+};

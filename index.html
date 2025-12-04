@@ -23,23 +23,31 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <div class="lg:col-span-2 bg-gray-800 p-4 rounded-lg shadow-lg">
                 <h2 class="text-xl font-semibold mb-3 border-b border-gray-600">Código Assembly (RV32I)</h2>
+                
+                <div class="mb-3 flex items-center gap-3">
+                    <label for="benchmark-selector" class="text-gray-400 text-sm font-semibold">Carregar Benchmark:</label>
+                    <select id="benchmark-selector" class="bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                        <option value="custom">-- Código Personalizado --</option>
+                        <option value="sum_long">1. Somatório (Dependência Longa)</option>
+                        <option value="stride8_mem">2. Varredura Stride 8 (MEM-Bound)</option>
+                        <option value="binary_search">3. Busca Binária (Controle/Branch)</option>
+                        <option value="waw_rename">4. Dependência WAW (Rename Teste)</option>
+                    </select>
+                </div>
                 <textarea id="code-input" class="w-full h-40 bg-gray-900 text-green-400 font-mono p-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none text-sm" spellcheck="false">
 addi x1, x0, 10
 addi x2, x0, 20
-add x3, x1, x2  ; Dependência RAW (x1, x2)
-sub x4, x3, x1  ; Dependência RAW (x3, x1)
-beq x1, x2, 2   ; Desvio NÃO tomado
-beq x1, x1, 2   ; Desvio TOMADO (causa flush)
-nop             ; (Será "flushed")
+add x3, x1, x2
+sub x4, x3, x1
+beq x1, x2, 2
 addi x5, x0, 5
 lw x6, 4(x0)
-add x7, x6, x1  ; Stall por Load
-jal x0, 2       ; Salto incondicional
-nop
+add x7, x6, x1
+jal x0, 2
 addi x8, x0, 8
 </textarea>
                 <div class="mt-3 flex gap-2">
-                    <button id="btn-load" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-bold transition">Carregar Programa</button>
+                    <button id="btn-load" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-bold transition">Carregar Programa/Benchmark</button>
                     <button id="btn-step" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm font-bold transition disabled:opacity-50" disabled>Step (Ciclo)</button>
                     <button id="btn-run" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm font-bold transition disabled:opacity-50" disabled>Run (Executar)</button>
                     <button id="btn-reset" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm font-bold transition">Reset</button>

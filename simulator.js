@@ -18,6 +18,96 @@ const EXEC_LATENCIES = {
     BRANCH: 1
 };
 
+// ADICIONADO: DEFINIÇÃO DOS BENCHMARKS
+const BENCHMARK_CODES = {
+    sum_long: `
+addi x5, x0, 0      ; x5 = Soma = 0
+addi x6, x0, 0      ; x6 = Contador i = 0
+addi x10, x0, 100   ; Endereço base do vetor
+addi x11, x0, 10    ; Tamanho do vetor (N=10)
+
+LOOP_SUM:
+    lw x7, 0(x10)       ; x7 = MEM[x10] (Load)
+    add x5, x5, x7      ; x5 = x5 + x7 (Dependência Longa em x5)
+    addi x10, x10, 4    ; x10 += 4
+    addi x6, x6, 1      ; i++
+    bne x6, x11, LOOP_SUM ; Continua se i != N
+
+FINISH:
+    nop
+    `,
+    stride8_mem: `
+addi x10, x0, 100   ; Endereço Base (Ex: RAM[100])
+addi x11, x0, 10    ; Limite de N iterações
+addi x7, x0, 32     ; Stride = 32 bytes
+addi x5, x0, 0      ; Contador i = 0
+
+LOOP_STRIDE:
+    lw x6, 0(x10)       ; Carrega x6 (Cache Misses)
+    addi x6, x6, 1      ; Op simples
+    add x10, x10, x7    ; x10 = x10 + Stride
+    addi x5, x5, 1      ; i++
+    bne x5, x11, LOOP_STRIDE
+    
+FINISH:
+    nop
+    `,
+    binary_search: `
+addi x10, x0, 100   ; Endereço Base do Vetor
+addi x11, x0, 500   ; Chave de Busca (Key)
+addi x12, x0, 0     ; Low = 0
+addi x13, x0, 9     ; High = 9 (Array 10)
+
+LOOP_BS:
+    addi x17, x0, 1     ; Stop Condition (Low > High)
+    slt x16, x13, x12
+    bne x16, x0, NOT_FOUND 
+
+    addi x14, x0, 4     ; M = 4 (hardcoded para exemplo simples)
+    slli x14, x14, 2    ; x14 = M * 4 (Offset)
+    add x14, x10, x14   ; x14 = Endereço de M
+
+    lw x15, 0(x14)      ; x15 = vector[M]
+
+    beq x11, x15, FOUND ; Se Key == vector[M], achou.
+
+    sub x16, x11, x15   ; x16 = Key - vector[M]
+    blt x16, x0, H_MINUS_1 ; Branch Intenso
+    
+L_PLUS_1:
+    addi x12, x14, 1    ; Low = M + 1 (Apenas para o índice)
+    jal x0, LOOP_BS
+
+H_MINUS_1:
+    addi x13, x14, -1   ; High = M - 1 (Apenas para o índice)
+    jal x0, LOOP_BS
+
+FOUND:
+    addi x30, x0, 1     ; Sucesso
+    jal x0, FINISH
+
+NOT_FOUND:
+    addi x30, x0, 0     ; Falha
+
+FINISH:
+    nop
+    `,
+    waw_rename: `
+addi x1, x0, 10
+addi x2, x0, 20
+
+; T1 e T3 escrevem em x6 (WAW)
+addi x6, x1, 5      ; T1: x6 = 15. ROB#1.
+sub x7, x1, x2      ; T2: Independente
+add x6, x2, x7      ; T3: x6 = 20 + (-10) = 10. ROB#2.
+
+addi x8, x6, 1      ; T4: Dependente de T3 (deve esperar T3 commitar)
+
+FINISH:
+    nop
+    `
+};
+
 // --- CLASSES AUXILIARES (Hardware Components) ---
 
 class Cache {
@@ -709,8 +799,22 @@ class Simulator {
 // Inicialização
 const sim = new Simulator();
 
+// ADICIONADO: Lógica de seleção do Benchmark
+const benchmarkSelector = document.getElementById('benchmark-selector');
+const codeInput = document.getElementById('code-input');
+
+benchmarkSelector.onchange = () => {
+    const key = benchmarkSelector.value;
+    if (key === 'custom') {
+        codeInput.value = ''; // Limpa para código manual
+    } else {
+        codeInput.value = BENCHMARK_CODES[key].trim();
+    }
+};
+
 document.getElementById('btn-load').onclick = () => {
-    sim.loadProgram(document.getElementById('code-input').value);
+    // A função loadProgram agora usa o conteúdo da área de texto, que foi preenchida pelo seletor.
+    sim.loadProgram(codeInput.value);
     document.getElementById('btn-step').disabled = false;
     document.getElementById('btn-run').disabled = false;
 };
